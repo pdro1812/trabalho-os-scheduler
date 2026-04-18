@@ -1,3 +1,3 @@
-module github.com/pedro/scheduler-api
+module github.com/pdro1812/trabalho-os-scheduler/backend
 
 go 1.24.4
