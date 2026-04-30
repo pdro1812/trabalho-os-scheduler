@@ -1,18 +1,20 @@
-FROM golang:1.24.4-alpine
+# Usa uma imagem oficial do Node.js baseada em Alpine (leve e rápida)
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copia os arquivos de dependência
-COPY go.mod ./
-# Se tiver go.sum, descomente a linha abaixo
-# COPY go.sum ./
-RUN go mod download
+# Copia apenas os arquivos de dependência primeiro
+# Isso otimiza o cache do Docker; o npm install só vai rodar de novo se você mudar algo no package.json
+COPY package*.json ./
 
-# Copia o código fonte
+# Instala as dependências (express, cors, etc.)
+RUN npm install
+
+# Copia o restante do código fonte
 COPY . .
 
 # Expõe a porta da API
 EXPOSE 8080
 
 # Roda o servidor
-CMD ["go", "run", "./cmd/api/main.go"]
+CMD ["node", "cmd/api/server.js"]

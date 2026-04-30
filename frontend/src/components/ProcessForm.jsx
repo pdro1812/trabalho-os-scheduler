@@ -97,9 +97,6 @@ const ProcessForm = ({ onSimulate }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '10px' }}>
         <h3 style={{ margin: 0, color: '#111827' }}>Fila de Processos</h3>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button type="button" onClick={generateProfessorTest} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '500', transition: 'background 0.2s' }}>
-            🎓 Cenário de Prova
-          </button>
           <button type="button" onClick={generateRandom} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '500' }}>
             🎲 Aleatório
           </button>
