@@ -1,75 +1,78 @@
-/**
- * FCFS – First Come, First Served (Não Preemptivo)
- * Regra fundamental: quem chega primeiro, executa primeiro.
- */
+function runFCFS(requisicao) {
+    // Pegamos a lista de processos da requisição
+    const processos = [];
+    for (let i = 0; i < requisicao.Processes.length; i++) {
+        processos.push(requisicao.Processes[i]);
+    }
 
-function runFCFS(req) {
-    // Cria uma cópia rasa para não mutar os dados originais da requisição
-    const processes = [...req.Processes];
+    // Primeiro, ordenamos os processos por tempo de chegada (ArrivalTime)
+    processos.sort((a, b) => a.ArrivalTime - b.ArrivalTime);
 
-    // Ordena por ArrivalTime. 
-    // então empates mantêm a ordem original do array 
-    processes.sort((a, b) => a.ArrivalTime - b.ArrivalTime);
+    const ordemExecucao = [];
+    const metricas = [];
+    let tempoAtual = 0;
+    let somaEspera = 0;
+    let somaTurnaround = 0;
 
-    const executionOrder = [];
-    const metrics       = [];
-    let currentTime     = 0;
-    let totalWaitTime   = 0;
-    let totalTurnaroundTime = 0;
+    // Esta variável ajuda a saber se a CPU acabou de sair de um estado parada
+    let veioDeOciosidade = true;
 
-    // Flag que registra se a CPU esteve ociosa antes deste processo.
-    // Quando verdadeira, o TTC NÃO é cobrado
-    let cameFromIdle = true;
+    for (let i = 0; i < processos.length; i++) {
+        const p = processos[i];
 
-    processes.forEach((p, i) => {
-        // --- OCIOSIDADE ---
-        // Se nenhum processo está disponível, a CPU fica parada.
-        // Avançamos o tempo diretamente para a chegada do próximo processo.
-        if (currentTime < p.ArrivalTime) {
-            // Como a CPU ficou ociosa, limpamos o contexto para não cobrar TTC na chegada do próximo processo
-            currentTime  = p.ArrivalTime;
-            cameFromIdle = true; // sinaliza que voltamos do repouso
+        // Se o processo ainda não chegou, a CPU fica ociosa (parada)
+        if (tempoAtual < p.ArrivalTime) {
+            tempoAtual = p.ArrivalTime;
+            veioDeOciosidade = true;
         }
 
-        // --- TROCA DE CONTEXTO ---
-        // O TTC só é cobrado em transição DIRETA entre dois processos diferentes.
-        // Se viemos da ociosidade, o contexto já foi "limpo" no repouso, então pulamos o TTC
-        if (i > 0 && !cameFromIdle && req.TTC > 0) {
-            executionOrder.push({
-                PID  : "TTC",
-                Start: currentTime,
-                End  : currentTime + req.TTC
+        // Se NÃO veio de ociosidade e existe um tempo de troca de contexto (TTC)
+        // Adicionamos esse tempo antes de começar o processo
+        if (i > 0 && veioDeOciosidade === false && requisicao.TTC > 0) {
+            ordemExecucao.push({
+                PID: "TTC",
+                Start: tempoAtual,
+                End: tempoAtual + requisicao.TTC
             });
-            currentTime += req.TTC;
+            tempoAtual = tempoAtual + requisicao.TTC;
         }
 
-        // Após inserir (ou não) o TTC, a CPU está pronta para executar o processo
-        cameFromIdle = false;
+        // Agora o processo vai rodar
+        veioDeOciosidade = false;
+        const inicio = tempoAtual;
+        tempoAtual = tempoAtual + p.BurstTime;
+        const fim = tempoAtual;
 
-        // --- EXECUÇÃO ---
-        const start = currentTime;
-        currentTime += p.BurstTime;
-        const end = currentTime;
+        // Registramos a execução no gráfico de Gantt
+        ordemExecucao.push({
+            PID: p.PID,
+            Start: inicio,
+            End: fim
+        });
 
-        executionOrder.push({ PID: p.PID, Start: start, End: end });
+        // Calculamos as métricas deste processo
+        // Turnaround: quanto tempo o processo ficou no sistema (do início até o fim)
+        const turnaround = fim - p.ArrivalTime;
+        // Espera: tempo total no sistema menos o tempo que ele realmente rodou
+        const espera = turnaround - p.BurstTime;
 
-        // --- MÉTRICAS ---
-        // Turnaround = Tempo de Término - Tempo de Chegada
-        const turnaround = end - p.ArrivalTime;
-        // Espera = Turnaround - Burst Time original
-        const wait = turnaround - p.BurstTime;
+        metricas.push({
+            PID: p.PID,
+            EffectiveTime: turnaround,
+            WaitingTime: espera
+        });
 
-        metrics.push({ PID: p.PID, EffectiveTime: turnaround, WaitingTime: wait });
-        totalTurnaroundTime += turnaround;
-        totalWaitTime       += wait;
-    });
+        somaTurnaround += turnaround;
+        somaEspera += espera;
+    }
 
-    const n = processes.length;
+    // Calculamos as médias finais
+    const totalProcessos = processos.length;
     return {
-        ExecutionOrder     : executionOrder,
-        Metrics            : metrics,
-        AvgWaitTime        : totalWaitTime / n,
-        AvgTurnaroundTime  : totalTurnaroundTime / n
+        ExecutionOrder: ordemExecucao,
+        Metrics: metricas,
+        AvgWaitTime: somaEspera / totalProcessos,
+        AvgTurnaroundTime: somaTurnaround / totalProcessos
     };
 }
 
