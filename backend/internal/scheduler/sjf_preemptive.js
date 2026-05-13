@@ -1,140 +1,138 @@
-/**
- * SJF Preemptivo – Shortest Remaining Time First (SRTF)
- * A cada tick de tempo, o processo com o menor tempo RESTANTE vence a CPU.
- * Se um novo processo chegar com burst menor que o restante do atual, ocorre preempção.
- */
-function runSJFPreemptive(req) {
-    const processes = [...req.Processes];
-    const n = processes.length;
+function runSJFPreemptive(requisicao) {
+    const processos = [];
+    for (let i = 0; i < requisicao.Processes.length; i++) {
+        processos.push(requisicao.Processes[i]);
+    }
 
-    // remainingTime armazena quanto cada processo ainda precisa rodar
-    const remainingTime     = processes.map(p => p.BurstTime);
-    const executionOrder    = [];
-    const metrics           = [];
-    let currentTime         = 0;
-    let completed           = 0;
-    let totalWaitTime       = 0;
-    let totalTurnaroundTime = 0;
+    const n = processos.length;
+    const tempoRestante = [];
+    for (let i = 0; i < n; i++) {
+        tempoRestante.push(processos[i].BurstTime);
+    }
 
-    // Controle de bloco contínuo no Gantt: consolidamos ticks consecutivos do mesmo processo
-    let lastPID    = "";   // PID do processo rodando no tick anterior
-    let blockStart = 0;    // início do bloco atual no Gantt
+    const ordemExecucao = [];
+    const metricas = [];
+    let tempoAtual = 0;
+    let concluidos = 0;
+    let somaEspera = 0;
+    let somaTurnaround = 0;
 
-    // Flag de ociosidade: quando verdadeira, o próximo processo não paga TTC 
-    let cameFromIdle = true;
+    // Variáveis para controlar o desenho do gráfico de Gantt
+    let ultimoPID = "";
+    let inicioDoBloco = 0;
 
-    // Função auxiliar: seleciona o índice do processo com menor remainingTime
-    // disponível no instante t, aplicando os desempates.
-    const selectProcess = (t) => {
-        let idx   = -1;
-        let minRT = Infinity;
+    // Flag para saber se a CPU estava parada
+    let veioDeOciosidade = true;
+
+    // Loop que roda enquanto houver processos para terminar
+    while (concluidos < n) {
+        
+        // --- PASSO 1: Encontrar o processo com menor tempo restante ---
+        let indiceEscolhido = -1;
+        let menorTempo = Infinity;
+
         for (let i = 0; i < n; i++) {
-            if (processes[i].ArrivalTime <= t && remainingTime[i] > 0) {
-                if (remainingTime[i] < minRT) {
-                    minRT = remainingTime[i];
-                    idx   = i;
-                } else if (remainingTime[i] === minRT && idx !== -1) {
-                    // Desempate primário: quem chegou primeiro (Regra 3)
-                    if (processes[i].ArrivalTime < processes[idx].ArrivalTime) {
-                        idx = i;
+            // O processo precisa ter chegado E ainda ter tempo para rodar
+            if (processos[i].ArrivalTime <= tempoAtual && tempoRestante[i] > 0) {
+                if (tempoRestante[i] < menorTempo) {
+                    menorTempo = tempoRestante[i];
+                    indiceEscolhido = i;
+                }
+                // Em caso de empate, o que chegou primeiro tem prioridade
+                else if (tempoRestante[i] === menorTempo) {
+                    if (processos[i].ArrivalTime < processos[indiceEscolhido].ArrivalTime) {
+                        indiceEscolhido = i;
                     }
-                    // Desempate secundário: posição original no array (sort estável garante isso)
                 }
             }
         }
-        return idx;
-    };
 
-    while (completed < n) {
-        const idx = selectProcess(currentTime);
-
-        if (idx === -1) {
-            // --- OCIOSIDADE ---
-            // Nenhum processo disponível. Fechamos o bloco atual (se houver) e avançamos o tempo.
-            if (lastPID !== "" && blockStart < currentTime) {
-                executionOrder.push({ PID: lastPID, Start: blockStart, End: currentTime });
+        // --- PASSO 2: Se ninguém puder rodar agora, a CPU fica ociosa ---
+        if (indiceEscolhido === -1) {
+            // Se alguém estava rodando antes, fechamos o bloco dele no Gantt
+            if (ultimoPID !== "" && inicioDoBloco < tempoAtual) {
+                ordemExecucao.push({ PID: ultimoPID, Start: inicioDoBloco, End: tempoAtual });
             }
 
-            // Como a CPU ficou ociosa, limpamos o contexto para não cobrar TTC no próximo processo 
-            lastPID      = "";
-            cameFromIdle = true;
+            ultimoPID = "";
+            veioDeOciosidade = true;
 
-            // Salta diretamente para o instante de chegada do próximo processo 
-            let nextArrival = Infinity;
+            // Avançamos o tempo para a próxima chegada
+            let proximaChegada = Infinity;
             for (let i = 0; i < n; i++) {
-                if (remainingTime[i] > 0 && processes[i].ArrivalTime < nextArrival) {
-                    nextArrival = processes[i].ArrivalTime;
+                if (tempoRestante[i] > 0 && processos[i].ArrivalTime < proximaChegada) {
+                    proximaChegada = processos[i].ArrivalTime;
                 }
             }
-            currentTime  = nextArrival;
-            blockStart   = currentTime; // o próximo bloco começa aqui
+            tempoAtual = proximaChegada;
+            inicioDoBloco = tempoAtual;
             continue;
         }
 
-        const p = processes[idx];
+        const p = processos[indiceEscolhido];
 
-        // --- TROCA DE CONTEXTO POR PREEMPÇÃO ---
-        // Ocorre quando o processo selecionado é DIFERENTE do que estava rodando antes.
-        // Se viemos da ociosidade, o TTC NÃO é cobrado (contexto já foi limpo no repouso).
-        if (p.PID !== lastPID) {
-            // Fecha o bloco Gantt do processo anterior
-            if (lastPID !== "" && blockStart < currentTime) {
-                executionOrder.push({ PID: lastPID, Start: blockStart, End: currentTime });
+        // --- PASSO 3: Lidar com a troca de processo (Preempção ou Início) ---
+        if (p.PID !== ultimoPID) {
+            
+            // Fecha o bloco do processo anterior no Gantt
+            if (ultimoPID !== "" && inicioDoBloco < tempoAtual) {
+                ordemExecucao.push({ PID: ultimoPID, Start: inicioDoBloco, End: tempoAtual });
             }
 
-            // Aplica o TTC apenas em transição direta entre dois processos (não saindo da ociosidade)
-            if (!cameFromIdle && lastPID !== "" && req.TTC > 0) {
-                executionOrder.push({
-                    PID  : "TTC",
-                    Start: currentTime,
-                    End  : currentTime + req.TTC
+            // Se mudou de processo e não veio de ociosidade, cobra TTC
+            if (veioDeOciosidade === false && ultimoPID !== "" && requisicao.TTC > 0) {
+                ordemExecucao.push({
+                    PID: "TTC",
+                    Start: tempoAtual,
+                    End: tempoAtual + requisicao.TTC
                 });
-                currentTime += req.TTC;
-
-                // Após o TTC, a seleção pode mudar (novos processos podem ter chegado).
-                // Recomeçamos o loop para garantir que o processo correto vença a CPU.
-                blockStart = currentTime;
-                lastPID    = ""; // força reavaliação sem cobrar TTC duplo
-                continue;
+                tempoAtual = tempoAtual + requisicao.TTC;
+                
+                // Após o TTC, precisamos reavaliar quem deve rodar (novos processos podem ter chegado)
+                inicioDoBloco = tempoAtual;
+                ultimoPID = ""; 
+                continue; 
             }
 
-            // Inicia o novo bloco para o processo recém-selecionado
-            lastPID      = p.PID;
-            blockStart   = currentTime;
-            cameFromIdle = false;
+            // Começa um novo bloco para o novo processo
+            ultimoPID = p.PID;
+            inicioDoBloco = tempoAtual;
+            veioDeOciosidade = false;
         }
 
-        // --- EXECUÇÃO DE 1 TICK ---
-        // O SRTF avança 1 unidade por vez para poder reavaliar preempções a cada instante
-        remainingTime[idx]--;
-        currentTime++;
+        // --- PASSO 4: Executar 1 unidade de tempo (Tick) ---
+        tempoRestante[indiceEscolhido]--;
+        tempoAtual++;
 
-        // --- TÉRMINO DO PROCESSO ---
-        if (remainingTime[idx] === 0) {
-            completed++;
+        // --- PASSO 5: Se o processo terminou, calculamos as métricas ---
+        if (tempoRestante[indiceEscolhido] === 0) {
+            concluidos++;
 
-            // Fecha o bloco Gantt do processo que acabou de terminar
-            executionOrder.push({ PID: p.PID, Start: blockStart, End: currentTime });
+            // Fecha o bloco no Gantt
+            ordemExecucao.push({ PID: p.PID, Start: inicioDoBloco, End: tempoAtual });
 
-            // --- MÉTRICAS  ---
-            const turnaround = currentTime - p.ArrivalTime;
-            const wait       = turnaround - p.BurstTime;
-            totalTurnaroundTime += turnaround;
-            totalWaitTime       += wait;
-            metrics.push({ PID: p.PID, EffectiveTime: turnaround, WaitingTime: wait });
+            const turnaround = tempoAtual - p.ArrivalTime;
+            const espera = turnaround - p.BurstTime;
 
-            // Mantemos lastPID com o PID do processo que terminou:
-            // assim, se o próximo processo for diferente, o TTC será cobrado corretamente.
-            // Mas NÃO zeramos cameFromIdle — a CPU não ficou ociosa, apenas o processo terminou.
-            blockStart = currentTime; // atualizamos o início do próximo bloco potencial
+            metricas.push({
+                PID: p.PID,
+                EffectiveTime: turnaround,
+                WaitingTime: espera
+            });
+
+            somaTurnaround += turnaround;
+            somaEspera += espera;
+
+            // Prepara para o próximo bloco
+            inicioDoBloco = tempoAtual;
         }
     }
 
     return {
-        ExecutionOrder    : executionOrder,
-        Metrics           : metrics,
-        AvgWaitTime       : totalWaitTime / n,
-        AvgTurnaroundTime : totalTurnaroundTime / n
+        ExecutionOrder: ordemExecucao,
+        Metrics: metricas,
+        AvgWaitTime: somaEspera / n,
+        AvgTurnaroundTime: somaTurnaround / n
     };
 }
 

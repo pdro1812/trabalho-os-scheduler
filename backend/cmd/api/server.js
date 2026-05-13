@@ -1,30 +1,27 @@
-// server.js (Equivalente ao main.go)
-
+// Importamos as bibliotecas necessárias
 const express = require('express');
 const cors = require('cors');
 
-// Importação dos handlers corrigida para buscar na pasta certa
-// Voltamos duas pastas (cmd e api) usando '../../' e entramos em internal/handlers
+// Importamos a função que processa a simulação
+// Ela está em outro arquivo para organizar melhor o código
 const { simulateHandler } = require('../../internal/handlers/handlers'); 
 
+// Criamos o aplicativo do servidor
 const app = express();
 
-// Middleware básico para CORS (exatamente como sua função corsMiddleware)
-app.use(cors({
-    origin: '*',
-    methods: ['POST', 'GET', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
-}));
+// Configuramos o CORS para permitir que o navegador acesse nossa API
+// Isso é necessário quando o front-end e o back-end estão em endereços diferentes
+app.use(cors());
 
-// Middleware obrigatório no Express para ele entender o JSON que vem do React
-// Faz o papel de ler o corpo da requisição que o Go faz por baixo dos panos
+// Configuramos o servidor para entender dados enviados em formato JSON
 app.use(express.json());
 
-// Rotas
+// Definimos a "rota" da nossa API
+// Quando alguém enviar um POST para '/api/simulate', chamamos o simulateHandler
 app.post('/api/simulate', simulateHandler);
 
-// Inicialização do servidor
+// Escolhemos a porta onde o servidor vai "escutar" (8080)
 const PORT = 8080;
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor Node.js rodando na porta ${PORT}`);
+    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
 });
